@@ -74,6 +74,12 @@ const userSchema = new mongoose.Schema({
             if (ret.position?.id) {
                 ret.positionId = ret.position.id;
             }
+            if(ret.profileUrl instanceof mongoose.Types.ObjectId){
+                delete ret.profileUrl;
+            }
+            if (ret.profileUrl?.id) {
+                ret.profileUrlId = ret.profileUrl.id;
+            }
             ret.fullName = `${ret?.name ?? ""} ${ret?.last_name ?? ""} ${ret?.last_name2 ?? ""}`
             delete ret.password;
             delete ret._id;

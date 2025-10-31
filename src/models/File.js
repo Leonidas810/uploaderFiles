@@ -7,7 +7,8 @@ const { v4: uuidv4 } = require('uuid');
  * File schema representing uploaded files with versioning and metadata.
  * @typedef {Object} File
  * @property {string} id - Unique identifier for the file (UUID).
- * @property {string} key - Storage key or path for the file.
+ * @property {string} key - Storage key or path for the file full.
+ * @property {string} key_thumb - Storage key or path for the file thumb.
  * @property {string} originalName - Original name of the uploaded file.
  * @property {string} mimeType - MIME type of the file (e.g., "image/png").
  * @property {number} size - File size in bytes.
@@ -22,6 +23,10 @@ const fileSchema = new mongoose.Schema({
         unique: true
     },
     key: {
+        type: String,
+        required: true
+    },
+    key_thumb: {
         type: String,
         required: true
     },
@@ -46,6 +51,7 @@ const fileSchema = new mongoose.Schema({
         type: [
             {
                 key: String,
+                key_thumb: String,
                 versionNumber: Number,
                 size: Number,
                 mimeType: String,
