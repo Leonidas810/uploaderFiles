@@ -21,13 +21,29 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 } // 10MB max, tune as needed
 });
 
+const allowwedFormat = ['image/jpeg', 'image/png', 'image/webp'];
+
+
+const foundPathtoProfileImg = async (user, key) => {
+    try {
+        const { id, profileImg } = user;
+        // Build the path to the file on disk
+        const filepath = path.join(UPLOAD_ROOT, `/${id}/profile`, path.basename(profileImg[key]));
+        if (!await fs.pathExists(filepath)) {
+            return res.status(404).json({ error: 'File not found on server' });
+        }
+        return filepath;
+    } catch (err) {
+        throw err;
+    }
+}
+
 //Post user's profile img
 router.post('/profile', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file' });
 
-        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-        if (!allowed.includes(req.file.mimetype)) {
+        if (!allowwedFormat.includes(req.file.mimetype)) {
             return res.status(415).json({ error: 'Unsupported file type' });
         }
 
@@ -63,9 +79,9 @@ router.post('/profile', upload.single('file'), async (req, res) => {
             .toFile(thumbPath);
 
         let file;
-        if (requestedUser?.profileUrl) {
+        if (requestedUser?.profileImg) {
             //recover metada in case that exist
-            file = await File.findById(requestedUser?.profileUrl);
+            file = await File.findById(requestedUser?.profileImg);
             file.key = `users/${userId}/profile/${filename}`;
             file.key_thumb = `users/${userId}/profile/${thumbName}`;
             file.originalName = req.file.originalname;
@@ -109,7 +125,7 @@ router.post('/profile', upload.single('file'), async (req, res) => {
             });
             // Update user's profile image URL
             await User.findByIdAndUpdate(requestedUser._id, {
-                profileUrl: file._id
+                profileImg: file._id
             });
         }
         res.json({
@@ -122,31 +138,57 @@ router.post('/profile', upload.single('file'), async (req, res) => {
     }
 });
 
-// Get user's profile image min
+//Get user profile image min by user_id
+router.get('/profile/thumb/user/:user_id', findById(User, 'user_id', 'user'), upload.single('file'), async (req, res) => {
+    try {
+        let user = req.user;
+        if (!user.profileImg) {
+            return res.status(404).json({ success: false, error: 'No profile image found' });
+        }
+
+        user = await user.populate({
+            path: 'profileImg'
+        })
+
+        const { profileImg } = user;
+        let filepath = await foundPathtoProfileImg(user, 'key_thumb')
+
+
+        res.setHeader('Content-Type', profileImg.mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${profileImg.originalName}"`);
+
+        const stream = fs.createReadStream(filepath);
+        stream.on('error', (err) => {
+            console.error('Stream error:', err);
+            res.status(500).end();
+        });
+        stream.pipe(res);
+
+    } catch (error) {
+        console.error('Profile image fetch error:', error);
+        res.status(500).json({ error: 'Error retrieving profile image' });
+    }
+})
+
+// Get me user's profile image min
 router.get('/profile/thumb', async (req, res) => {
     try {
         let requestedUser = req.requestedUser;
 
-        if (!requestedUser.profileUrl) {
+        if (!requestedUser.profileImg) {
             return res.status(404).json({ success: false, error: 'No profile image found' });
         }
 
         requestedUser = await requestedUser.populate({
-            path: 'profileUrl'
+            path: 'profileImg'
         })
 
-        const { id, profileUrl } = requestedUser;
+        const { profileImg } = requestedUser;
 
-        // Build the path to the file on disk
-        let filepath = path.join(UPLOAD_ROOT, `/${id}/profile`, path.basename(profileUrl.key_thumb));
+        let filepath = await foundPathtoProfileImg(requestedUser, 'key_thumb')
 
-        // Make sure the file exists before streaming
-        if (!await fs.pathExists(filepath)) {
-            return res.status(404).json({ error: 'File not found on server' });
-        }
-
-        res.setHeader('Content-Type', profileUrl.mimeType);
-        res.setHeader('Content-Disposition', `inline; filename="${profileUrl.originalName}"`);
+        res.setHeader('Content-Type', profileImg.mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${profileImg.originalName}"`);
 
         const stream = fs.createReadStream(filepath);
         stream.on('error', (err) => {
@@ -161,31 +203,55 @@ router.get('/profile/thumb', async (req, res) => {
     }
 });
 
-// Get user's profile image full
+// Get me user's profile image full by user_id
+router.get('/profile/full/user/:user_id', findById(User, 'user_id', 'user'), async (req, res) => {
+    try {
+        let user = req.user;
+
+        if (!user.profileImg) {
+            return res.status(404).json({ success: false, error: 'No profile image found' });
+        }
+
+        user = await user.populate({
+            path: 'profileImg'
+        })
+        const { profileImg } = user;
+        let filepath = await foundPathtoProfileImg(user, 'key')
+
+        res.setHeader('Content-Type', profileImg.mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${profileImg.originalName}"`);
+
+        const stream = fs.createReadStream(filepath);
+        stream.on('error', (err) => {
+            console.error('Stream error:', err);
+            res.status(500).end();
+        });
+        stream.pipe(res);
+
+    } catch (error) {
+        console.error('Profile image fetch error:', error);
+        res.status(500).json({ error: 'Error retrieving profile image' });
+    }
+});
+
+// Get me user's profile image full
 router.get('/profile/full', async (req, res) => {
     try {
         let requestedUser = req.requestedUser;
 
-        if (!requestedUser.profileUrl) {
+        if (!requestedUser.profileImg) {
             return res.status(404).json({ success: false, error: 'No profile image found' });
         }
 
         requestedUser = await requestedUser.populate({
-            path: 'profileUrl'
+            path: 'profileImg'
         })
 
-        const { id, profileUrl } = requestedUser;
+        const { profileImg } = requestedUser;
+        let filepath = await foundPathtoProfileImg(requestedUser, 'key');
 
-        // Build the path to the file on disk
-        let filepath = path.join(UPLOAD_ROOT, `/${id}/profile`, path.basename(profileUrl.key));
-
-        // Make sure the file exists before streaming
-        if (!await fs.pathExists(filepath)) {
-            return res.status(404).json({ error: 'File not found on server' });
-        }
-
-        res.setHeader('Content-Type', profileUrl.mimeType);
-        res.setHeader('Content-Disposition', `inline; filename="${profileUrl.originalName}"`);
+        res.setHeader('Content-Type', profileImg.mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${profileImg.originalName}"`);
 
         const stream = fs.createReadStream(filepath);
         stream.on('error', (err) => {
